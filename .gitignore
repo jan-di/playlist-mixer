@@ -1,0 +1,8 @@
+# Python
+*.pyc
+.venv
+
+# App
+.cache-*
+*.env
+.playlist-mixer
