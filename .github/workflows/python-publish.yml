@@ -10,8 +10,8 @@ name: Upload Python Package
 
 on:
   push:
-    # branches:
-    #   - "main"
+    branches:
+      - "main"
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
 
@@ -40,14 +40,14 @@ jobs:
 
       - name: Upload distributions
         uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           name: release-dists
-          path: |
-            dist/
-            CHANGELOG.md
+          path: dist/
 
   pypi-publish:
     runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/')
     needs:
       - poetry-build
     permissions:
@@ -56,6 +56,10 @@ jobs:
     environment:
       name: pypi
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: "CHANGELOG.md"
+
       - name: Retrieve release distributions
         uses: actions/download-artifact@v4
         with:
@@ -69,7 +73,6 @@ jobs:
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           body_path: CHANGELOG.md
           files: dist/
