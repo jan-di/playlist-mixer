@@ -52,6 +52,7 @@ jobs:
       - poetry-build
     permissions:
       contents: write # Release
+      discussions: write # Discussions
       id-token: write # Pypi
 
     environment:
