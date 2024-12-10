@@ -217,7 +217,7 @@ class PlaylistMixer:
         playlist["tracks"] = tracks
 
         # Inject audio features to all tracks
-        self.__inject_audio_features(tracks)
+        #self.__inject_audio_features(tracks)
 
         self.playlist_cache[playlist_id] = playlist
         return playlist
