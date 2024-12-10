@@ -1,17 +1,18 @@
 [tool.poetry]
 name = "playlist-mixer"
-version = "0.1.0"
-description = ""
-authors = ["Jan Dittrich <jan.dittrich@cgm.com>"]
+version = "0.0.0"
+# Version will be overwritten by pipeline
+description = "Playlist Mixer for Spotify"
+authors = ["Jan Dittrich <mail@jand.one>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.13"
 spotipy = "^2.24.0"
 click = "^8.1.7"
 
 [tool.poetry.scripts]
-mixer = "playlist_mixer.cli:main"
+playlist-mixer = "playlist_mixer.cli:main"
 
 [build-system]
 requires = ["poetry-core"]
