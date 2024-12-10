@@ -6,3 +6,6 @@
 .cache-*
 *.env
 .playlist-mixer
+
+# MacOS
+.DS_Store
