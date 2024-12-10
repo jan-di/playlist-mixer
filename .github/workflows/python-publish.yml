@@ -76,5 +76,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: CHANGELOG.md
-          files: dist/
-          discussion_category_name: 📣Announcements
+          files: dist/*
+          discussion_category_name: Announcements
