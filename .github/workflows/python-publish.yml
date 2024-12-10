@@ -9,15 +9,18 @@
 name: Upload Python Package
 
 on:
-  release:
-    types: [published]
+  push:
+    # branches:
+    #   - "main"
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: read
 
 jobs:
-  release-build:
-    runs-on: ubuntu-latest
+  poetry-build:
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +28,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      
+
       - name: Install Poetry
         uses: snok/install-poetry@v1
-      
+
       - name: Build release distributions
         run: |
           poetry self add poetry-git-version-plugin
@@ -42,9 +45,9 @@ jobs:
           path: dist/
 
   pypi-publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
-      - release-build
+      - poetry-build
     permissions:
       id-token: write
 
@@ -61,3 +64,9 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          body_path: CHANGELOG.md
