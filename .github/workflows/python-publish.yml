@@ -51,6 +51,7 @@ jobs:
     needs:
       - poetry-build
     permissions:
+      contents: read
       id-token: write
 
     environment:
