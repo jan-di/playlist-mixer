@@ -31,6 +31,8 @@ jobs:
       
       - name: Build release distributions
         run: |
+          poetry self add poetry-git-version-plugin
+          poetry git-version
           poetry build
 
       - name: Upload distributions
