@@ -51,8 +51,8 @@ jobs:
     needs:
       - poetry-build
     permissions:
-      contents: read
-      id-token: write
+      contents: write # Release
+      id-token: write # Pypi
 
     environment:
       name: pypi
@@ -77,3 +77,4 @@ jobs:
         with:
           body_path: CHANGELOG.md
           files: dist/
+          discussion_category_name: 📣Announcements
