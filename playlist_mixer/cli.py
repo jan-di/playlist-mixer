@@ -2,189 +2,217 @@
 Playlist Mixer
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import random
-import os
-from os import path
+from os import path, environ
+from pathlib import Path
 
 import click
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth, CacheFileHandler, SpotifyOauthError
 from spotipy.exceptions import SpotifyException
+from spotipy.oauth2 import SpotifyOauthError
 
-CLI_ENVVAR_PREFIX = "MIXER"
-
-
-def add_spotify_client_options(f):
-    """Common options for using a spotify api client"""
-    f = click.option(
-        "-u",
-        "--username",
-        help="Spotify Username (env: {CLI_ENVVAR_PREFIX}_SPOTIFY_USERNAME)",
-        envvar=f"{CLI_ENVVAR_PREFIX}_SPOTIFY_USERNAME",
-        required=True,
-    )(f)
-    f = click.option(
-        "--spotify-client-id",
-        help=f"Spotify Client ID (env: {CLI_ENVVAR_PREFIX}_SPOTIFY_CLIENT_ID)",
-        envvar=f"{CLI_ENVVAR_PREFIX}_SPOTIFY_CLIENT_ID",
-        required=True,
-    )(f)
-    f = click.option(
-        "--spotify-client-secret",
-        help=f"Spotify Client Secret (env: {CLI_ENVVAR_PREFIX}_SPOTIFY_CLIENT_SECRET)",
-        envvar=f"{CLI_ENVVAR_PREFIX}_SPOTIFY_CLIENT_SECRET",
-        required=True,
-    )(f)
-    f = click.option(
-        "--spotify-client-redirect-uri",
-        help=f"Spotify Client Secret (env: {CLI_ENVVAR_PREFIX}_SPOTIFY_REDIRECT_URI)",
-        envvar=f"{CLI_ENVVAR_PREFIX}_SPOTIFY_REDIRECT_URI",
-        required=True,
-    )(f)
-    return f
+from playlist_mixer.config import Config, UserConfig
+from playlist_mixer.spotify import SpotifyAuth
 
 
 @click.group()
 @click.option(
-    "-tz",
     "--timezone",
-    help=f"Timezone to use. (env: {CLI_ENVVAR_PREFIX}_TIMEZONE)",
+    help=f"Timezone to use. (env: {Config.TMEZONE_ENV})",
+    envvar=Config.TMEZONE_ENV,
     default="UTC",
 )
-def cli(timezone):
+@click.option(
+    "--config-dir",
+    help=f"Config directory. Defaults to $XDG_CONFIG_HOME/playlist-mixer or ~/.config/playlist-mixer (env: {Config.CONFIG_DIR_ENV})",
+    envvar=Config.CONFIG_DIR_ENV,
+)
+@click.option(
+    "--cache-dir",
+    help=f"Cache directory. Defaults to $XDG_CACHE_HOME/playlist-mixer or ~/.cache/playlist-mixer (env: {Config.CACHE_DIR_ENV})",
+    envvar=Config.CACHE_DIR_ENV,
+)
+def cli(
+    timezone: str = None,
+    config_dir: str = None,
+    cache_dir: str = None,
+):
     """
     Playlist Mixer for Spotify.
     """
 
+    user_home = Path.home()
+
+    # Determine and ensure config directory
+    if config_dir is None:
+        xdg_config_home = environ.get("XDG_CONFIG_HOME", None)
+        if xdg_config_home is not None:
+            config_dir = path.join(xdg_config_home, "playlist-mixer")
+
+    if config_dir is None:
+        config_dir = path.join(user_home, ".config/playlist-mixer")
+
+    Config.config_dir = path.abspath(config_dir)
+    Path(Config.config_dir).mkdir(parents=True, exist_ok=True)
+
+    # Determine and ensure cache directory
+    if cache_dir is None:
+        xdg_cache_home = environ.get("XDG_CACHE_HOME", None)
+        if xdg_cache_home is not None:
+            cache_dir = path.join(xdg_cache_home, "playlist-mixer")
+
+    if cache_dir is None:
+        cache_dir = path.join(user_home, ".cache/playlist-mixer")
+
+    Config.cache_dir = path.abspath(cache_dir)
+    click.echo(Config.cache_dir)
+    Path(Config.cache_dir).mkdir(parents=True, exist_ok=True)
+
+    # Determine timezone
+    Config.timezone = ZoneInfo(timezone)
+
 
 @cli.command(name="mix")
-@add_spotify_client_options
-@click.option("-p", "--playlist-id", required=True, help="Playlist ID to mix")
+@click.option("-p", "--playlist", help="Output playlist id")
+@click.option("-s", "--source", "sources", help="Source playlist uri", multiple=True)
 def cli_mix(
-    username,
-    spotify_client_id,
-    spotify_client_secret,
-    spotify_client_redirect_uri,
-    playlist_id,
+    playlist,
+    sources: list[str],
 ):
     """Command: Mix playlist"""
-    cli_util = CliUtil(
-        spotify_client_id=spotify_client_id,
-        spotify_client_secret=spotify_client_secret,
-        spotify_client_redirect_uri=spotify_client_redirect_uri,
-    )
-    click.echo(f"Logging in as {username}..")
-    token = cli_util.get_token(username)
+    try:
+        sp = SpotifyAuth.get_client()
+    except RuntimeError as e:
+        click.echo(click.style(f"Error: {e}", fg="red"))
+        return
 
-    if token:
-        click.echo("Mixing playlist..")
-        sp = spotipy.Spotify(auth=token)
+    click.echo("Mixing playlist..")
+    pm = PlaylistMixer(sp)
 
-        zoneinfo = ZoneInfo("Europe/Berlin")
+    click.echo(f"Fetching {len(sources)} sources..")
+    for source in sources:
 
-        now = datetime.now(tz=zoneinfo)
-        # subtract one week
-        two_weeks_ago = now - timedelta(weeks=2)
-
-        pm = PlaylistMixer(sp)
-        track_pool1 = pm.get_playlist_tracks(
-            playlist_id, added_after=two_weeks_ago, date_inclusive=True
-        )
-        track_pool2 = pm.get_playlist_tracks(
-            playlist_id, added_before=two_weeks_ago, date_inclusive=False
-        )
-
-        random.shuffle(track_pool1)
-        random.shuffle(track_pool2)
-
-        managed_playlist_id = ensure_playlist(
-            sp, path.join(cli_util.data_dir, "playlist_id.txt")
-        )
-
-        dts = now.strftime("%Y-%m-%d %H:%M:%S")
-        sp.playlist_change_details(managed_playlist_id, name=f"Mixed {dts}")
-
-        track_ids = [track["id"] for track in track_pool1 + track_pool2]
-
-        clear_playlist(sp, managed_playlist_id)
-
-        for i in range(0, len(track_ids), 100):
-            sp.playlist_add_items(managed_playlist_id, track_ids[i : i + 100])
-
-        managed_playlist = sp.playlist(managed_playlist_id)
+        source_playlist = pm.get_playlist(source)
         click.echo(
-            f"Playlist mixed successfully: {managed_playlist['external_urls']['spotify']}"
+            f"Fetched Playlist: {source_playlist['name']} ({source_playlist['id']}) with {len(source_playlist['tracks'])}"
         )
+
+    now = datetime.now(tz=Config.timezone)
+    # subtract two weeks
+    two_weeks_ago = now - timedelta(weeks=2)
+
+    track_pool1 = []
+    track_pool2 = []
+
+    for source in sources:
+        track_pool1 += pm.get_playlist_tracks(
+            source, added_after=two_weeks_ago, date_inclusive=True
+        )
+        track_pool2 += pm.get_playlist_tracks(
+            source, added_before=two_weeks_ago, date_inclusive=False
+        )
+
+    random.shuffle(track_pool1)
+    random.shuffle(track_pool2)
+
+    click.echo(f"Track pool 1: {len(track_pool1)}")
+    click.echo(f"Track pool 2: {len(track_pool2)}")
+
+    try:
+        managed_playlist = sp.playlist(playlist)
+    except SpotifyException as e:
+        click.echo(click.style(f"Error: {e}", fg="red"))
+        return
+
+    dts = now.strftime("%Y-%m-%d %H:%M:%S")
+    sp.playlist_change_details(managed_playlist["id"], name=f"Mixed {dts}")
+
+    track_ids = [track["id"] for track in track_pool1 + track_pool2]
+
+    pm.clear_playlist(managed_playlist["id"])
+
+    for i in range(0, len(track_ids), 100):
+        sp.playlist_add_items(managed_playlist["id"], track_ids[i : i + 100])
+
+    click.echo(
+        f"Playlist mixed successfully: {managed_playlist['external_urls']['spotify']}"
+    )
 
 
 @cli.command(name="login")
-@add_spotify_client_options
+@click.option(
+    "--client-id",
+    help=f"Spotify Client ID (env: {Config.SPOTIFY_CLIENT_ID_ENV})",
+    envvar=Config.SPOTIFY_CLIENT_ID_ENV,
+)
+@click.option(
+    "--client-secret",
+    help=f"Spotify Client Secret (env: {Config.SPOTIFY_CLIENT_SECRET_ENV})",
+    envvar=Config.SPOTIFY_CLIENT_SECRET_ENV,
+)
+@click.option(
+    "--client-redirect-uri",
+    help=f"Spotify Client Secret (env: {Config.SPOTIFY_REDIRECT_URI_ENV})",
+    envvar=Config.SPOTIFY_REDIRECT_URI_ENV,
+)
 def cli_login(
-    username, spotify_client_id, spotify_client_secret, spotify_client_redirect_uri
+    client_id: str = None,
+    client_secret: str = None,
+    client_redirect_uri: str = None,
 ):
     """Command: Login to Spotify"""
-    cli_util = CliUtil(
-        spotify_client_id=spotify_client_id,
-        spotify_client_secret=spotify_client_secret,
-        spotify_client_redirect_uri=spotify_client_redirect_uri,
+
+    if client_secret and not environ.get(Config.SPOTIFY_CLIENT_SECRET_ENV, None):
+        click.echo(
+            click.style(
+                "Warning: Providing the Client Secret via command line is consided insecure. Please use environment variable or interactive input instead.",
+                fg="yellow",
+            )
+        )
+
+    if client_id is None:
+        client_id = click.prompt("Spotify Client ID")
+
+    if client_secret is None:
+        client_secret = click.prompt("Spotify Client Secret", hide_input=True)
+
+    if client_redirect_uri is None:
+        client_redirect_uri = click.prompt("Spotify Client Redirect URI")
+
+    spotify_auth = SpotifyAuth(
+        spotify_client_id=client_id,
+        spotify_client_secret=client_secret,
+        spotify_client_redirect_uri=client_redirect_uri,
     )
     try:
-        cli_util.get_token(username, open_browser=True)
-        click.echo("Logged in successfully.")
+        token = spotify_auth.get_token()
     except SpotifyOauthError as e:
-        click.echo("Failed to login to spotify.")
-        click.echo(e)
+        click.echo(click.style("Failed to login to spotify:", fg="red"))
+        click.echo(click.style(e, fg="red"))
+        return
+
+    sp = spotipy.Spotify(auth=token)
+    me = sp.me()
+
+    user_config = UserConfig(
+        user_id=me["id"],
+        spotify_client_id=client_id,
+        spotify_client_secret=client_secret,
+        spotify_client_redirect_uri=client_redirect_uri,
+    )
+    UserConfig.store_user_config(user_config)
+
+    click.echo(f"Logged in successfully as {me['display_name']} ({me['id']})")
 
 
-class CliUtil:
-    """
-    Utility class for CLI
-    """
+@cli.command(name="logout")
+def cli_logout():
+    """Command: Logout from Spotify"""
 
-    def __init__(
-        self, spotify_client_id: str, spotify_client_secret, spotify_client_redirect_uri
-    ):
-        self.data_dir = ".playlist-mixer/data"
-        self.cache_dir = ".playlist-mixer/cache"
-
-        self.spotify_client_id = spotify_client_id
-        self.spotify_client_secret = spotify_client_secret
-        self.spotify_client_redirect_uri = spotify_client_redirect_uri
-
-        os.makedirs(self.data_dir, exist_ok=True)
-        os.makedirs(self.cache_dir, exist_ok=True)
-
-    def get_token(self, username, open_browser=False):
-        """Get token, show interactive prompt if required"""
-        cache_path = path.join(self.cache_dir, f"user-{username}.json")
-        cache_handler = CacheFileHandler(cache_path=cache_path, username=username)
-        auth_manager = SpotifyOAuth(
-            scope="playlist-modify-private,playlist-modify-public",
-            cache_handler=cache_handler,
-            client_id=self.spotify_client_id,
-            client_secret=self.spotify_client_secret,
-            redirect_uri=self.spotify_client_redirect_uri,
-            show_dialog=True,
-            open_browser=open_browser,
-        )
-
-        token_info = auth_manager.validate_token(
-            auth_manager.cache_handler.get_cached_token()
-        )
-
-        if not token_info:
-            code = auth_manager.get_auth_response()
-            token = auth_manager.get_access_token(code, as_dict=False)
-        else:
-            return token_info["access_token"]
-
-        # Auth'ed API request
-        if token:
-            return token
-        else:
-            return None
+    UserConfig.delete_user_config()
+    click.echo("Logged out successfully")
 
 
 class PlaylistMixer:
@@ -217,9 +245,6 @@ class PlaylistMixer:
         # Remove local tracks, currently not supported
         tracks = list(filter(lambda d: not d["is_local"], tracks))
         playlist["tracks"] = tracks
-
-        # Inject audio features to all tracks
-        # self.__inject_audio_features(tracks)
 
         self.playlist_cache[playlist_id] = playlist
         return playlist
@@ -262,55 +287,18 @@ class PlaylistMixer:
 
         return result
 
-    def __inject_audio_features(self, tracks: list[dict]):
+    def clear_playlist(self, playlist_id: str):
         """
-        Retreives and injects audio features into a given track list
+        Clear all tracks from a playlist
         """
-        track_ids = [track["track"]["id"] for track in tracks]
 
-        for i in range(0, len(track_ids), 100):
-            audio_features = self.sp.audio_features(track_ids[i : i + 100])
-            for track, af in zip(tracks[i : i + 100], audio_features):
-                track["audio_features"] = af
-
-
-def show_tracks(tracks):
-    for i, item in enumerate(tracks["items"]):
-        track = item["track"]
-        print("   %d %32.32s %s" % (i, track["artists"][0]["name"], track["name"]))
-
-
-def ensure_playlist(sp: spotipy.Spotify, playlist_id_file: str) -> str:
-    try:
-        with open(playlist_id_file, "r", encoding="utf8") as f:
-            playlist_id = f.read()
-            sp.playlist(playlist_id)
-    except FileNotFoundError:
-        playlist_id = None
-    except SpotifyException as e:
-        if e.http_status == 404:
-            playlist_id = None
-        else:
-            raise e
-
-    if playlist_id is None:
-        playlist = sp.user_playlist_create(
-            sp.me()["id"], "Mixed Playlist123", public=False
-        )
-        with open(playlist_id_file, "w", encoding="utf8") as f:
-            f.write(playlist["id"])
-
-    return playlist_id
-
-
-def clear_playlist(sp: spotipy.Spotify, playlist_id: str):
-    sp.playlist_replace_items(playlist_id, [])
+        self.sp.playlist_replace_items(playlist_id, [])
 
 
 def main():
     """Main entrypoint"""
+
     cli(
-        auto_envvar_prefix="MIXER",
         max_content_width=160,
     )
 
