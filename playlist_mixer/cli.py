@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import random
 from os import path, environ
 from pathlib import Path
+import importlib
 
 import click
 import spotipy
@@ -213,6 +214,15 @@ def cli_logout():
 
     UserConfig.delete_user_config()
     click.echo("Logged out successfully")
+
+
+@cli.command(name="version")
+def cli_version():
+    """Command: Show version"""
+
+    version = importlib.metadata.version("playlist_mixer")
+
+    click.echo(f"Playlist Mixer {version}")
 
 
 class PlaylistMixer:
