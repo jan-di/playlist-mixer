@@ -78,9 +78,11 @@ def cli(
 @cli.command(name="mix")
 @click.option("-p", "--playlist", help="Output playlist id")
 @click.option("-s", "--source", "sources", help="Source playlist uri", multiple=True)
+@click.option("-f", "--focus", "focus", help="Focus days", type=int, default=0)
 def cli_mix(
     playlist,
     sources: list[str],
+    focus: int,
 ):
     """Command: Mix playlist"""
     try:
@@ -90,6 +92,9 @@ def cli_mix(
         return
 
     click.echo("Mixing playlist..")
+    if focus > 0:
+        click.echo(f"Focus: {focus} days")
+
     pm = PlaylistMixer(sp)
 
     click.echo(f"Fetching {len(sources)} sources..")
@@ -101,18 +106,17 @@ def cli_mix(
         )
 
     now = datetime.now(tz=Config.timezone)
-    # subtract two weeks
-    two_weeks_ago = now - timedelta(weeks=2)
+    focus_threshold = now - timedelta(days=focus)
 
     track_pool1 = []
     track_pool2 = []
 
     for source in sources:
         track_pool1 += pm.get_playlist_tracks(
-            source, added_after=two_weeks_ago, date_inclusive=True
+            source, added_after=focus_threshold, date_inclusive=True
         )
         track_pool2 += pm.get_playlist_tracks(
-            source, added_before=two_weeks_ago, date_inclusive=False
+            source, added_before=focus_threshold, date_inclusive=False
         )
 
     random.shuffle(track_pool1)
