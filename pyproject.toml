@@ -10,6 +10,7 @@ readme = "README.md"
 python = "^3.13"
 spotipy = "^2.24.0"
 click = "^8.1.7"
+truststore = "^0.10.1"
 
 [tool.poetry.scripts]
 playlist-mixer = "playlist_mixer.cli:main"

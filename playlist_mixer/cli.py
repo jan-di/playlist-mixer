@@ -8,6 +8,7 @@ import random
 from os import path, environ
 from pathlib import Path
 import importlib
+import truststore
 
 import click
 import spotipy
@@ -43,6 +44,8 @@ def cli(
     """
     Playlist Mixer for Spotify.
     """
+
+    truststore.inject_into_ssl()
 
     user_home = Path.home()
 
