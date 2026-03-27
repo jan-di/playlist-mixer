@@ -210,14 +210,14 @@ use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 
 [[package]]
 name = "spotipy"
-version = "2.25.1"
+version = "2.26.0"
 description = "A light weight Python library for the Spotify Web API"
 optional = false
 python-versions = ">3.8"
 groups = ["main"]
 files = [
-    {file = "spotipy-2.25.1-py3-none-any.whl", hash = "sha256:18f47d9a0594ced8001b3baa5a4160ea6dcf570abbdad371971f475a81892844"},
-    {file = "spotipy-2.25.1.tar.gz", hash = "sha256:607d3c43722b7e217a7e6c82f17258b798b92a512017d60c06323d62ae814cd7"},
+    {file = "spotipy-2.26.0-py3-none-any.whl", hash = "sha256:2726854ddfa0e5624aada592e737832ec75bdc00ae12c102779f8bd995329d49"},
+    {file = "spotipy-2.26.0.tar.gz", hash = "sha256:df6a25d8209072efa8cea165608ee644884e3804f8762b6d8e06ca1a5c7f8a63"},
 ]
 
 [package.dependencies]
@@ -227,7 +227,7 @@ urllib3 = ">=1.26.0"
 
 [package.extras]
 memcache = ["pymemcache (>=3.5.2)"]
-test = ["autopep8 (>=2.3.2)", "flake8 (>=7.1.1)", "flake8-string-format (>=0.3.0)", "isort (>=5.13.2)"]
+test = ["autopep8 (>=2.3.2)", "flake8 (>=7.3.0)", "flake8-use-fstring (>=1.4)", "isort (>=7.0.0)"]
 
 [[package]]
 name = "truststore"
