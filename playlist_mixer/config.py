@@ -64,8 +64,13 @@ class UserConfig:
             return None
 
         with open(user_config_path, "r", encoding="utf8") as f:
-            user_config_json = json.load(f)
-            user_config = UserConfig(**user_config_json)
+            try:
+                user_config_json = json.load(f)
+                user_config = UserConfig(**user_config_json)
+            except (json.JSONDecodeError, TypeError):
+                # File is missing, corrupt or from an incompatible schema.
+                # Treat it as if no config was saved yet.
+                return None
 
         return user_config
 

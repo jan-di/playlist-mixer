@@ -180,6 +180,23 @@ def cli_login(
             )
         )
 
+    # Reuse Spotify app credentials from a previous login so re-authenticating
+    # (e.g. after a revoked/expired token) only requires the browser step.
+    existing_config = UserConfig.load_user_config()
+    reused_credentials = False
+
+    if client_id is None and existing_config:
+        client_id = existing_config.spotify_client_id
+        reused_credentials = True
+
+    if client_secret is None and existing_config:
+        client_secret = existing_config.spotify_client_secret
+        reused_credentials = True
+
+    if client_redirect_uri is None and existing_config:
+        client_redirect_uri = existing_config.spotify_client_redirect_uri
+        reused_credentials = True
+
     if client_id is None:
         client_id = click.prompt("Spotify Client ID")
 
@@ -188,6 +205,12 @@ def cli_login(
 
     if client_redirect_uri is None:
         client_redirect_uri = click.prompt("Spotify Client Redirect URI")
+
+    if reused_credentials:
+        click.echo(
+            "Using previously saved Spotify app credentials. "
+            "Pass --client-id/--client-secret/--client-redirect-uri to use different ones."
+        )
 
     spotify_auth = SpotifyAuth(
         spotify_client_id=client_id,

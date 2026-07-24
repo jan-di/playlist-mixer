@@ -4,7 +4,7 @@ Auth Utils for Spotify
 
 from os import path
 
-from spotipy.oauth2 import CacheFileHandler, SpotifyOAuth
+from spotipy.oauth2 import CacheFileHandler, SpotifyOAuth, SpotifyOauthError
 from spotipy import Spotify as Spotipy
 
 from playlist_mixer.config import Config, UserConfig
@@ -39,9 +39,14 @@ class SpotifyAuth:
             open_browser=True,
         )
 
-        token_info = auth_manager.validate_token(
-            auth_manager.cache_handler.get_cached_token()
-        )
+        try:
+            token_info = auth_manager.validate_token(
+                auth_manager.cache_handler.get_cached_token()
+            )
+        except SpotifyOauthError:
+            # Cached refresh token is invalid/revoked (e.g. by Spotify or the
+            # user). Discard it and fall through to a fresh interactive login.
+            token_info = None
 
         if not token_info:
             code = auth_manager.get_auth_response()
