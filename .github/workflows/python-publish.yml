@@ -39,7 +39,7 @@ jobs:
           poetry build
 
       - name: Upload distributions
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: startsWith(github.ref, 'refs/tags/')
         with:
           name: release-dists
@@ -63,7 +63,7 @@ jobs:
           sparse-checkout: "CHANGELOG.md"
 
       - name: Retrieve release distributions
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-dists
           path: dist/
